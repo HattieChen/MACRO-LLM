@@ -1,0 +1,22 @@
+[Function: Next_State Computation]
+Given the my current state (distance, velocity), ahead vehicle state (distance_ahead, velocity_ahead), my action (acceleration), ahead vehicle action (acceleration_ahead). The control interval is 1 second.
+next_velocity = velocity + acceleration × 1
+ego_displacement = velocity × 1 + 0.5 × acceleration × 1²
+ahead_displacement = velocity_ahead × 1 + 0.5 × acceleration_ahead × 1²
+next_distance = distance + (ahead_displacement - ego_displacement)
+return next_velocity, next_distance
+You do not know the acceleration_ahead, you can propose an optimal acceleration_ahead for vehicle_ahead.
+
+[Function: Reward_score Calculation]
+Given the my current state (distance, velocity), ahead vehicle state (distance_ahead, velocity_ahead), my action (acceleration), ahead vehicle action (acceleration_ahead). The control interval is 1 second.
+Calling function [Function: Next_State Computation] to calculate the next_velocity and next_distance.
+distance_reward = - (next_distance - 20)^2
+velocity_reward = - (next_velocity - 15)^2
+acceleration_reward = - 0.1 * acceleration^2
+if next_distance <= 10 meters: return reward_score = -3000,
+else: return reward_score = distance_reward + velocity_reward + acceleration_reward
+
+[Equation: optimal action according to distance]
+distance_optimal_acceleration = (2 * ahead_velocity) + (2 * distance) - 40 - (2 * velocity).
+[Equation: optimal action according to velocity]
+velocity_optimal_acceleration = 15 - velocity

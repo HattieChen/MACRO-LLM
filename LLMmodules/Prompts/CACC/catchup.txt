@@ -1,0 +1,30 @@
+ in a system of eight vehicles (vehicle1 to vehicle8) arranged in a single-lane platoon. The driving direction: virtual leader <-- vehicle1 <-- vehicle2 <-- vehicle3 <-- vehicle4 <-- vehicle5 <-- vehicle6 <-- vehicle7 <-- vehicle8. The entire platoon follows a virtual leader vehicle moving at a constant speed of 15 m/s. Each vehicle adjusts its motion based solely on the vehicle directly ahead: vehicle1 follows the virtual leader, and vehicle8 is at the end of the formation. All vehicles move in a straight line, maintaining the formation through local interactions.
+
+[Objective Instruction]
+INDIVIDUAL OBJECTIVE: Each following vehicle (vehicle1 to vehicle8) must adjust its motion to achieve a distance (distance to the vehicle ahead) of exactly 20 meters as soon as possible. Once this 20-meter distance is reached, the vehicle should stabilize its speed at 15 m/s same as the virtual target vehicle to maintain formation.
+GLOBAL OBJECTIVE: The system intends to minimize the maximum time required for all following vehicles to achieve and maintain a 20-meter distance from the vehicle ahead. The final stabilized state for each vehicles is: distance = 20 meters, speed = 15 m/s, and acceleration = 0.
+
+[State Instruction]
+Each vehicle observes its own states and the states of its neighbors (the vehicle directly ahead and behind) every second.
+The state of vehicle<index> is represented as a tuple: `(distance, velocity)`, where:
+- `distance`: the distance from the front of the ego vehicle to the rear of the vehicle AHEAD (for example, distance of vehicle1 is the distance between vehicle1 and the virtual target vehicle, distance of vehicle2 is the distance between vehicle2 and vehicle1 ...).
+- Distance increases when the ego vehicle is slower than the vehicle ahead. distance decreases when the ego vehicle faster than the vehicle ahead. The target distance is 20 meters.
+- `velocity`: current speed (in meters/second). The maximal velocity is 30m/s.
+
+[Action Instruction]
+- You can set your own acceleration value, chosen from the range [−2.5, 2.5] m/s².
+- Control Strategies: includes: ACCELERATION: 0 < acceleration <= 2.5 m/s² (the velocity will be increased), DECELERATION: -2.5 <= acceleration < 0 (the velocity will be reduced), MAINTAINING SPEED: acceleration = 0 (the velocity will not changed).
+
+[Collaboration Instruction]
+- You can propose acceleration suggestions for your neighbors (vehicle ahead and behind) for encouraging collaboration, using natural language and brief justification. The collaboration strategy format is (A's strategy, B's strategy), where A is the vehicle ahead of B.
+- The following table describes all possible collaborative strategies between vehicle A and vehicle B, and their effects on the velocities and the gap (distance) between B and A:
+- (ACCELERATION, ACCELERATION): Both A and B increase their velocities, the gap between B and A is maintained.
+- (ACCELERATION, MAINTAINING): A increases its velocity, B maintains its velocity, the gap between B and A increases.
+- (ACCELERATION, DECELERATION): A increases its velocity, B decreases its velocity, the gap between B and A increases significantly.
+- (MAINTAINING, ACCELERATION): A maintains its velocity, B increases its velocity, the gap between B and A decreases.
+- (MAINTAINING, MAINTAINING): Both A and B maintain their velocities, the gap between B and A is maintained.
+- (MAINTAINING, DECELERATION): A maintains its velocity, B decreases its velocity, the gap between B and A increases.
+- (DECELERATION, ACCELERATION): A decreases its velocity, B increases its velocity, the gap between B and A decreases significantly.
+- (DECELERATION, MAINTAINING): A decreases its velocity, B maintains its velocity, the gap between B and A decreases.
+- (DECELERATION, DECELERATION): Both A and B decrease their velocities, the gap between B and A is maintained.
+Note: The "gap between B and A" refers to the relative distance from the following vehicle B to the leading vehicle A.

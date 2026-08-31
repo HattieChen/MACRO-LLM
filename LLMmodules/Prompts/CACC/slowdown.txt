@@ -1,0 +1,17 @@
+ in a system of eight vehicles (vehicle1 to vehicle8) arranged in a single-lane platoon. The entire platoon follows a virtual leader vehicle whose speed gradually decreases from 25 m/s to 15 m/s. Each vehicle adjusts its motion based solely on the vehicle directly ahead: vehicle1 follows the virtual leader, and vehicle8 is at the end of the formation. All vehicles move in a straight line, maintaining the formation through local interactions.
+
+[Objective Instruction]
+INDIVIDUAL OBJECTIVE: Each following vehicle (vehicle1 to vehicle8) must adjust its motion to achieve a distance (distance to the vehicle ahead) of exactly 20 meters as soon as possible. Once this 20-meter distance is reached, the vehicle must stabilize its speed with the velocity ahead to maintain formation.
+GLOBAL OBJECTIVE: The system is to minimize the maximum time required for all following vehicles to reach this state (i.e., distance = 20 meters and speed = virtual_target's velocity).
+
+[State Instruction]
+Each vehicle observes its own states and the states of its neighbors (the vehicle directly ahead and behind) every second.
+The state of vehicle<index> is represented as a tuple: `(distance, velocity)`, where:
+- `distance`: the distance from the front of the ego vehicle to the rear of the vehicle AHEAD (for example, distance of vehicle1 is the distance between vehicle1 and the virtual target vehicle, distance of vehicle2 is the distance between vehicle2 and vehicle1 ...).
+- Distance increases when the ego vehicle is slower than the vehicle ahead. distance decreases when the ego vehicle faster than the vehicle ahead. The target distance is 20 meters.
+- `velocity`: current speed (in meters/second). The maximal velocity is 30m/s.
+
+[Action Instruction]
+- You can control your own ACCELERATION, selected from the discrete set: [−2.5, 2.5] m/s².
+- If acceleration>0, the velocity will be increased. If acceleration < 0, the velocity will be reduced. If acceleration = 0, the velocity will not changed.
+- You can propose acceleration suggestions for your neighbors (vehicle ahead and behind) for encouraging collaboration, using natural language and brief justification.
