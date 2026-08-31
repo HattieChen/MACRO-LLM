@@ -51,7 +51,6 @@ azure_client1 = None
 azure_client2 = None
 client = None
 ACC = 2.5
-MAX_V = 20
 
 if FLAG == 'Gemini':
     proxy_url = os.environ.get("GOOGLE_PROXY_URL")
@@ -100,17 +99,7 @@ elif FLAG == 'Llama':
     )
     client = Swarm(client=azure_client1)
     print(f"{OPENAI_MODEL1} client initialized")
-elif FLAG == 'DeepInfra':
-    # ---------- DeepInfra: Meta-Llama-3.1-70B-Instruct -----------------------
-    API_KEY1 = require_env("DEEPINFRA_API_KEY")
-    BASE_URL1 = os.environ.get("DEEPINFRA_BASE_URL", "https://api.deepinfra.com/v1/openai")
-    OPENAI_MODEL1 = config.get("LLM_CONFIG", "MODEL")
-    azure_client1 = OpenAI(
-        api_key=API_KEY1,
-        base_url=BASE_URL1,
-    )
-    client = Swarm(client=azure_client1)
-    print("DeepInfra client initialized")
+
 # Generate lst dynamically based on VEHICLE_NUM
 lst = list(range(1, VEHICLE_NUM + 1))
 
@@ -497,7 +486,7 @@ class CPPAgent():
                     Step 4: Calculate total system rewards: R1 = R_v{self.agent_id}_t1 + R_v{self.agent_id + 1}_t1 and R2 = R_v{self.agent_id}_t2 + R_v{self.agent_id + 1}_t2.
                     Step 5: Feasibility Check
                     (1) If both R1 > -3000 and R2 > -3000 and R2 >= R1, output the current action proposal.
-                    (2) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (2) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     Output Format (STRICT): Your response must contain three sections, wrapped in the following tags and in the order shown:
                     <analysis>
@@ -523,7 +512,7 @@ class CPPAgent():
                     Step 2: Feasibility Check
                     (1) If both R1 > -3000, output the current action proposal.
                     (2) Check whether your chosen action match your current [Temporal Plan].
-                    (3) For each vehilce, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (3) For each vehilce, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     <analysis>
                     (Calculation steps and analysis.)
@@ -547,7 +536,7 @@ class CPPAgent():
                     Step 3: Feasibility Check
                     (1) If both R1 > -3000 and R2 > -3000, output the current action proposal.
                     (2) Check whether your chosen action match your current [Temporal Plan].
-                    (3) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (3) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     Output Format (STRICT): Your response must contain three sections, wrapped in the following tags and in the order shown:
                     <analysis>
@@ -577,7 +566,7 @@ class CPPAgent():
                     Step 5: Feasibility Check
                     - For both state_2 and state_3:
                     - The distance between vehicles must be greater than 10 meters.
-                    - The velocity of each vehicle must be less than {MAX_V} m/s.
+                    - The velocity of each vehicle must be less than 20 m/s.
                     - If any constraint is violated, go back to Step 0 and pick a more conservative action for vehicle1 (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat Steps 0-4 up to 10 times.
                     - If no feasible proposal is found after 10 iterations, output the best proposal found.
 
@@ -606,7 +595,7 @@ class CPPAgent():
                     Step 4: Calculate total system rewards: R1 = R_v{self.agent_id}_t1 + R_v{self.agent_id - 1}_t1 and R2 = R_v{self.agent_id}_t2 + R_v{self.agent_id - 1}_t2.
                     Step 5: Feasibility Check
                     (1) If both R1 > -3000 and R2 > -3000 and R2 >= R1, output the current action proposal.
-                    (2) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (2) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     Output Format (STRICT): Your response must contain three sections, wrapped in the following tags and in the order shown:
                     <analysis>
@@ -631,7 +620,7 @@ class CPPAgent():
                     Step 2: Feasibility Check
                     (1) If both R1 > -3000, output the current action proposal.
                     (2) Check whether your chosen action match your current [Temporal Plan].
-                    (3) For each vehilce, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (3) For each vehilce, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     Output Format (STRICT): Your response must contain three sections, wrapped in the following tags and in the order shown:
                     <analysis>
@@ -656,7 +645,7 @@ class CPPAgent():
                     Step 3: Feasibility Check
                     (1) If both R1 > -3000 and R2 > -3000, output the current action proposal.
                     (2) Check whether your chosen action match your current [Temporal Plan].
-                    (3) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (3) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     Output Format (STRICT): Your response must contain three sections, wrapped in the following tags and in the order shown:
                     <analysis>
@@ -686,7 +675,7 @@ class CPPAgent():
                     Step 5: Feasibility Check
                     - For both state_2 and state_3:
                     - The distance between vehicles must be greater than 10 meters.
-                    - The velocity of each vehicle must be less than {MAX_V} m/s.
+                    - The velocity of each vehicle must be less than 20 m/s.
                     - If any constraint is violated, go back to Step 0 and pick a more conservative action for vehicle1 (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat Steps 0-4 up to 10 times.
                     - If no feasible proposal is found after 10 iterations, output the best proposal found.
 
@@ -718,7 +707,7 @@ class CPPAgent():
                     Step 4: Calculate total system rewards: R1 = R_v{self.agent_id-1}_t1 + R_v{self.agent_id}_t1 + R_v{self.agent_id + 1}_t1 and R2 = R_v{self.agent_id-1}_t2 + R_v{self.agent_id}_t2 + R_v{self.agent_id + 1}_t2.
                     Step 5: Feasibility Check
                     (1) If both R1 > -3000 and R2 > -3000 and R2 >= R1, output the current action proposal.
-                    (2) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (2) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     Output Format (STRICT): Your response must contain three sections, wrapped in the following tags and in the order shown:
                     <analysis>
@@ -747,7 +736,7 @@ class CPPAgent():
                     Step 2: Feasibility Check
                     (1) If both R1 > -3000, output the current action proposal.
                     (2) Check whether your chosen action match your current [Temporal Plan].
-                    (3) For each vehilce, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (3) For each vehilce, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     Output Format (STRICT): Your response must contain three sections, wrapped in the following tags and in the order shown:
                     <analysis>
@@ -775,7 +764,7 @@ class CPPAgent():
                     Step 3: Feasibility Check
                     (1) If both R1 > -3000 and R2 > -3000, output the current action proposal.
                     (2) Check whether your chosen action match your current [Temporal Plan].
-                    (3) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than {MAX_V} m/s.
+                    (3) For each vehilce in t=1 and t=2, distance must higher than 10 meters, and the velocity must less than 20 m/s.
                     If any constraint is violated, go back to Step 0 and pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no fully feasible proposal is found after 10 iterations, stop and return the best proposal you have.
                     Output Format (STRICT): Your response must contain three sections, wrapped in the following tags and in the order shown:
                     <analysis>
@@ -1557,7 +1546,7 @@ class CPPAgent():
                 Step 2: Calculate the reward_score of your final decision by calling the [Function: Reward_score Calculation]. Predict the next_state by calling [Function: Next_State Computation].
                 Step 3: Check your final decision whether satisfy:
                 (1) reward_score > -3000.
-                (2) next_velocity <= {MAX_V} m/s.
+                (2) next_velocity <= 20 m/s.
                 (3) next_distance >= 10 m.
                 If any constraint is violated, go back to Step 1 and adjust your weights/proposals slightly and pick another action for {self.agent_name}{self.agent_id}. Repeat this process up to 10 times. If no completely feasible solution can be found after all attempts, return the initial decision from the first round (proposer: vehicle7, receiver: vehicle7).
                 Step 4: Output yourself action in <action></action> using the exact format below:
@@ -1589,7 +1578,7 @@ class CPPAgent():
                 (1) reward_score > -3000.
                 """
                 # NOTE: delete (2) reward_score > {last_reward}
-                endDec += f"""(2) next_velocity <= {MAX_V} m/s.
+                endDec += f"""(2) next_velocity <= 20 m/s.
                 (3) next_distance >= 10 m.
                 If any constraint is violated, back to Step 2 and adjust your weights/proposals slightly to pick a more conservative action for {self.agent_name}{self.agent_id} (i.e., slightly reduce the magnitude of the acceleration or deceleration). Repeat this process up to 10 times. If no completely feasible solution can be found after all attempts, return the initial decision from the first round (proposer: vehicle7, receiver: vehicle7).
                 Step 5: Output yourself action in <action></action> using the exact format below:
