@@ -10,13 +10,12 @@ import os, sys
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.append(str(PROJECT_ROOT))
 from LLMmodules.CACC.catchup_utils import optimal_acc
-from LLMmodules.model_config import apply_model_override, apply_test_mode_override
+from LLMmodules.model_config import apply_model_override, apply_run_name_override
 
 # import matplotlib.pyplot as plt
 # import seaborn as sns
 # sns.set()
 # sns.set_color_codes()
-# 与 Agent 一致：由 run_cpp.py 的 --env 通过 CACC_ENV 控制
 _cacc_env = os.environ.get('CACC_ENV', 'catchup')
 _cacc_range = os.environ.get('CACC_RANGE', '').strip()
 _range_suffix = f"_{_cacc_range}" if _cacc_range in ('range0', 'range3') else ''
@@ -39,11 +38,11 @@ COLLISION_HEADWAY = 10
 VDIFF = 5
 
 OPENAI_MODEL = apply_model_override(config) # "qwen3-235b-a22b", "deepseek-v3", "qwen3-32b", "gpt-4o-mini"
-TEST_MODE = apply_test_mode_override(config) # DEBUG or EXP
+RUN_NAME = apply_run_name_override(config)
 if RECORD_FLAG == True:
     timestamp = datetime.now().strftime("%m%d")
     count = 0
-    folder_path = PROJECT_ROOT / f"experiments/RewardTest/LLM-{OPENAI_MODEL}/{timestamp}-{TEST_MODE}"
+    folder_path = PROJECT_ROOT / f"experiments/RewardTest/LLM-{OPENAI_MODEL}/{timestamp}-{RUN_NAME}"
     print(folder_path)
     # NOTE: 0312 LOW control flag
     # import pdb; pdb.set_trace()
@@ -67,11 +66,8 @@ class CACCEnv:
     # NOTE: acceleration
     def _constrain_speed(self, v, u):
         # apply constraints
-        # 下一时刻速度 v + 加速度 * duration
         v_next = v + np.clip(u, self.u_min, self.u_max) * self.dt
-        # clip速度
         v_next = np.clip(v_next, 0, self.v_max)
-        # 得到真实的加速度
         u_const = (v_next - v) / self.dt
         return v_next, u_const
 
@@ -95,14 +91,10 @@ class CACCEnv:
             # If collision: give the worst reward
             self.collision = True
             return -self.G * np.ones(self.n_agent)
-        # headwayReward = - 标准头距差的平方
         h_rewards = -(self.hs_cur - self.h_star) ** 2
-        # speedReward = - 车速reward因子 * 标准车速差的平方
         v_rewards = -self.a * (self.vs_cur - self.v_star) ** 2
-        # accReward = - 加速reward因子 * 加速度的平方
         u_rewards = -self.b * (self.us_cur) ** 2
         if self.train_mode:
-            # 训练过程可以给予碰撞奖励
             c_rewards = -COLLISION_WT * (np.minimum(self.hs_cur - COLLISION_HEADWAY, 0)) ** 2
         else:
             c_rewards = 0
@@ -152,23 +144,16 @@ class CACCEnv:
         Return:
             state_list: [v_state, vdiff_state, vhdiff_state, h_state, u_state]
         '''
-        # v_lead: 前车车速
 
         v_lead = self.vs_cur[i_veh-1] if i_veh else self.v0s[self.t]
 
-        # v_state: (当前车速-标准车速)/标准车速
         v_state = (self.vs_cur[i_veh] - self.v_star) / self.v_star
-        # vdiff_state: -2clip2(前车车速-当前车速)/标准车速差
         vdiff_state = np.clip((v_lead - self.vs_cur[i_veh]) / VDIFF, -2, 2)
-        # vh: 目标速度
         vh = self.ovm.get_vh(self.hs_cur[i_veh])
-        # vhdiff_state: -2clip2(目标车速-当前车速)/标准车速差
         vhdiff_state = np.clip((vh - self.vs_cur[i_veh]) / VDIFF, -2, 2)
-        # h_state: (当前headway + 与前车速度差 * 时间 - 标准headway) / 标准headway
         h_state = (self.hs_cur[i_veh] + (v_lead-self.vs_cur[i_veh])*self.dt - self.h_star) / self.h_star
         # v_state = np.clip((self.vs_cur[i_veh] - self.v_star) / self.v_norm, -2, 2)
         # h_state = np.clip((self.hs_cur[i_veh] - self.h_star) / self.h_norm, -2, 2)
-        # u_state: 当前加速度/最大加速度
         u_state = self.us_cur[i_veh] / self.u_max
 
         if RECORD_FLAG == True:
@@ -624,13 +609,6 @@ class CACCEnv:
 
 
 class OVMCarFollowing:
-    '''
-    The OVM controller for vehicle ACC
-    Attributes:
-        h_st (float): stop headway # min headway
-        h_go (float): full-speed headway # 全速headway
-        v_max (float): max speed 车辆速度上限
-    '''
     def __init__(self, h_st, h_go, v_max):
         """Initialization."""
         self.h_st = h_st
@@ -638,19 +616,12 @@ class OVMCarFollowing:
         self.v_max = v_max
 
     def get_vh(self, h, h_go=-1):
-        '''
-        Calculate objective speed
-        Args:
-            h: headway
-            h_go: full-speed headway 当前车与前车的距离大于这个值，后车可以以最大速度加速行驶
-        '''
         if h_go < 0:
             h_go = self.h_go
         if h <= self.h_st:
             # headway < stop threshold, v=0
             return 0
         elif self.h_st < h < h_go:
-            # stop headway < headway < full speed headway, 根据当前的位置返回合适的v, [0, self.v_max](h-self.h_st) / (1 - np.cos(np.pi * (h-self.h_st) / (h_go-self.h_st)))\in[0,2]
             return self.v_max / 2 * (1 - np.cos(np.pi * (h-self.h_st) / (h_go-self.h_st)))
             # vh = self.v_max * ((d-h_st) / (h_go-h_st))
         else:
@@ -669,7 +640,6 @@ class OVMCarFollowing:
         """
         vh = self.get_vh(h, h_go=h_go)
         # alpha is applied to both headway based V and leading speed based V.
-        # 目标速度差
         return alpha*(vh-v) + beta*(v_lead-v)
 
 

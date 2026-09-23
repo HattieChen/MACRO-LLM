@@ -1,0 +1,12 @@
+# CPP runtime dependencies for Python 3.10 or 3.11.
+# Source-derived compatibility ranges, not a lockfile of the original experiments.
+
+# The environment still uses Gym and PyTorch tensors; retain NumPy 1.x for Gym.
+numpy>=1.24,<2
+pandas>=1.5,<3
+torch>=2,<3
+gym==0.26.2
+
+# Agent.py imports both SDKs at module load time.
+openai>=1.33.0,<2
+google-genai>=1,<2

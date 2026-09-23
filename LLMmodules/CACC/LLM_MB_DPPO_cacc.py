@@ -7,7 +7,6 @@ import torch
 import numpy as np
 from datetime import datetime
 import os
-# from swarm import Swarm, Agent
 from LLMmodules.TaskConfiguration import catchup, slowdown
 from LLMmodules.model_config import apply_model_override
 # NOTE: LLM ------------------------------------------------------------
@@ -179,7 +178,6 @@ class OnPolicyRunner_LLM:
                                 # Initial over-episode analysis.
                                 ini_spa_tem_query_list, spa_tem_format_list = agent_i.initial_over_episode_insights(epi=ep_len, round=round, state=observe_current_state_list)
                                 over_episode_full, over_episode_content = agent_i.gen_response_with_format(query_content = ini_spa_tem_query_list, format_list = spa_tem_format_list)
-                                # API 失败时返回 (False, False)，必须检查再解析，否则会报 TypeError
                                 if over_episode_full is False and over_episode_content is False:
                                     print(f"[CACC test] agent_i.gen_response_with_format 返回 (False, False)：未生成 over_episode 内容。收到类型: full={type(over_episode_full).__name__}, content={type(over_episode_content).__name__}。请查看上方 [LLM ...] 日志确认 API 失败原因。")
                                     raise RuntimeError(
@@ -344,7 +342,6 @@ class OnPolicyRunner_LLM:
                                     }
                                     reproposal_query_content.append(within_episode_strategy)
                                     reproposal_query_content.append(reproposal_query_dict)
-                                    # proposal_full, proposal_content = agent_i.gen_response_with_format(query_content = reproposal_query_content, format_list = []) # NOTE 0428: 直接使用format，不需要xgrammar
                                     proposal_full, proposal_content = agent_i.gen_response_with_format(query_content = reproposal_query_content, format_list = ['proposal', 'analysis', 'output'])
                                     pass
                                     if ep_len == 0:

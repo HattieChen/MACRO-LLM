@@ -6,7 +6,7 @@ import re
 import ast
 from pathlib import Path
 from LLMmodules.TaskConfiguration import pandemic
-from LLMmodules.model_config import apply_test_mode_override
+from LLMmodules.model_config import apply_run_name_override
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAX_LLM_RESPONSE_ATTEMPTS = 10
@@ -31,27 +31,23 @@ def initialize_conversation_context(exp, epi, n_agent = 1, config = None, all_ag
         None
     """
     model = config.get("LLM_CONFIG", "MODEL")
-    Test_mode = apply_test_mode_override(config)
+    run_name = apply_run_name_override(config)
     file_path_list = list()
     SF_path_list = list()
-    # 定义保存路径：当前文件夹的上一层 conversation 文件夹
     base_path = os.path.join(os.getcwd(), f"LLMConversation/", exp)
-    os.makedirs(base_path, exist_ok=True)  # 如果文件夹不存在，则创建
-    # 生成动态文件名：MonthDayHourMinute_Con.json
+    os.makedirs(base_path, exist_ok=True)
     timestamp = datetime.now().strftime("%m%d%H")
     # file_name = f"{timestamp}_Con.json"
-    folder_name = f"{timestamp}_{model}/{Test_mode}/E_{epi}"
-    folder_name2 = f"{timestamp}_{model}/{Test_mode}/E_{epi}/SF"
+    folder_name = f"{timestamp}_{model}/{run_name}/E_{epi}"
+    folder_name2 = f"{timestamp}_{model}/{run_name}/E_{epi}/SF"
     conv_path = os.path.join(base_path, folder_name)
     conv_path2 = os.path.join(base_path, folder_name2)
     os.makedirs(conv_path, exist_ok=True)
     os.makedirs(conv_path2, exist_ok=True)
-    # 定义初始对话上下文
     conversation_context = {
     "experiment": exp,
     "messages": []
     }
-    # 写入到 JSON 文件
     convtime = datetime.now().strftime("%m%d%H%M")
     if all_agents is not None:
         for agent in all_agents:
@@ -153,16 +149,13 @@ def record_proposal_to_agents_comm_range(agent_list, comm_range, proposal_dict, 
 
 def parse_vehicle_output_list(proposals_by_vehicle):
     parsed_dict = {}
-    # 遍历每个vehicle的proposal字符串列表
     for vehicle, proposal_str_list in proposals_by_vehicle.items():
         vehicle_dict = {}
         for proposal_str in proposal_str_list:
-            # 匹配vehicle name
             name_match = re.search(r'E\d+_R\d+_(vehicle\d+)_proposal', proposal_str)
             if not name_match:
                 continue
             prop_vehicle = name_match.group(1)
-            # 匹配大括号里的内容
             dict_match = re.search(r'=\s*(\{[\s\S]*\})', proposal_str)
             if not dict_match:
                 continue
@@ -178,14 +171,10 @@ def parse_vehicle_output_list(proposals_by_vehicle):
 def collect_output_for_each_vehicle(proposal_round_dict):
     vehicle_to_proposals = {}
     for vehicle, proposal_str in proposal_round_dict.items():
-        # 把proposal字符串里的所有vehicle名字找出来
         related_vehicles = [v for v in proposal_round_dict if f'"{v}"' in proposal_str]
-        # 为自己收集相关proposal（自己和相关vehicle的proposal）
         proposals = [proposal_round_dict[v] for v in related_vehicles]
-        # 如果没包含自己的proposal，则补充上
         if vehicle not in related_vehicles:
             proposals.append(proposal_round_dict[vehicle])
-        # 排重
         proposals = list(dict.fromkeys(proposals))
         vehicle_to_proposals[vehicle] = proposals
     parsed_dict = parse_vehicle_output_list(vehicle_to_proposals)
@@ -394,9 +383,7 @@ def calculate_proposal_overlap(agent_e, received_output_list, MAX = 5):
             result[agent_key][neighbor] = {}
             for check_value in agent_e.observe_id_list:
                 proposed_agent_key = f"{agent_e.agent_name}{check_value}"
-                # my_proposal = received_output_list[agent_key][proposed_agent_key] # Rebuttal Note: 之前是直接使用，现在会用默认值替代
 
-                # 弱模型常漏 key：解析时 regex/literal_eval 失败会 skip，导致 received_output_list 不完整
                 agent_dict = received_output_list.get(agent_key, {})
                 my_proposal = agent_dict.get(proposed_agent_key)
                 if my_proposal is None or not isinstance(my_proposal, (int, float)):
@@ -411,7 +398,6 @@ def calculate_proposal_overlap(agent_e, received_output_list, MAX = 5):
                             else:
                                 neighbor_proposal = 0
                                 print(f"lost proposal: {proposed_agent_key}")
-                    # result[agent_key][neighbor][proposed_agent_key] = abs(neighbor_proposal - my_proposal) # Rebuttal Note: 之前是直接使用，现在会用默认值替代
                         else:
                             neighbor_proposal = 0
                     else:
@@ -430,32 +416,28 @@ def calculate_proposal_overlap(agent_e, received_output_list, MAX = 5):
                     avg = sum(values) / len(values)
                     diff_mean[main_key][sub_key] = avg/MAX*100
                 else:
-                    diff_mean[main_key][sub_key] = None  # 或者其他你想要的默认值
+                    diff_mean[main_key][sub_key] = None
         values = list(diff_mean[f'{agent_e.agent_name}{agent_e.agent_id}'].values())
         overall_mean = sum(values) / len(values)
         return result, diff_mean, overall_mean
 
 def clean_values(s: str) -> str:
-    """
-    把字符串 s 里所有 <…> 格式的值替换成数字（如果有唯一数字），否则替换成 None
-    """
     def replacer(match):
-        inside = match.group(1)  # 拿到 < ... > 里面的内容
+        inside = match.group(1)
         nums = re.findall(r'\d+', inside)
-        if len(set(nums)) == 1:   # 唯一数字
+        if len(set(nums)) == 1:
             return nums[0]
-        elif len(nums) == 0:      # 没有数字
+        elif len(nums) == 0:
             return "None"
-        else:                     # 多个数字
+        else:
             print(f"[WARN] 多个数字: {inside} -> {nums}")
             return "None"
 
-    # 替换所有 <...>
     return re.sub(r'<([^>]*)>', replacer, s)
 
 def safe_eval_dict(s: str):
     try:
-        return ast.literal_eval(s)  # 如果合法，直接返回
+        return ast.literal_eval(s)
     except Exception:
         pass
 
@@ -465,10 +447,9 @@ def safe_eval_dict(s: str):
             has_comma = line.strip().endswith(",")
             key, val = line.split(":", 1)
 
-            # 处理 "xxx" 数字 → "xxx 数字"
             val = re.sub(r'"([^"]*)"\s*(\d+)', r'"\1 \2"', val)
 
-            if val.count('"') > 2:  # 多余的引号才需要修复
+            if val.count('"') > 2:
                 parts = re.findall(r'"([^"]*)"', val)
                 merged = " ".join(p.strip() for p in parts if p.strip())
                 val = f' "{merged}"'
@@ -491,13 +472,7 @@ def safe_eval_dict(s: str):
 
 
 def _extract_dict_single_int_from_str(s: str):
-    """
-    从类似 {"Government": **STAGE 5**, "Restaurant": **STAGE 4**} 的字符串中，
-    按 key 提取「有且仅有一个有效整数」的 value，返回 dict 或 None。
-    """
     result = {}
-    # 匹配 "key" : value 或 key : value，value 可能是 **...**、数字、或带空格的
-    # 先按 key 切分：找 "xxx": 或 xxx: 后的片段直到下一个 key 或 }
     key_value_pairs = re.findall(r'"([^"]+)"\s*:\s*([^,}\]]+)|(\w+)\s*:\s*([^,}\]]+)', s)
     for parts in key_value_pairs:
         if parts[0]:
@@ -508,14 +483,13 @@ def _extract_dict_single_int_from_str(s: str):
         if len(nums) == 1:
             result[k] = int(nums[0])
         else:
-            return None  # 某 key 对应不是「恰好一个整数」，放弃
+            return None
     return result if result else None
 
 
 def transfer_string_to_dict(s):
     received_output_list = {}
     for key, raw in s.items():
-        # 提取 {...}
         if not isinstance(raw, str):
             print(f"[WARN] {key} 的 raw 不是字符串: {type(raw)}，值为: {raw}")
             pass
@@ -525,11 +499,9 @@ def transfer_string_to_dict(s):
             continue
         dict_str = match.group(0)
         dict_str = clean_values(dict_str)
-        # LLM 常输出 Markdown 加粗 **2** 或 **STAGE 5**，literal_eval 无法解析，先剥掉
         dict_str = re.sub(r'\*\*(\d+)\*\*', r'\1', dict_str)
 
         def replace_single_int_bold(m):
-            """若 **...** 内仅有唯一整数则替换为该整数，否则保留原样"""
             inner = m.group(1)
             nums = re.findall(r'\d+', inner)
             if len(nums) == 1:
@@ -538,10 +510,8 @@ def transfer_string_to_dict(s):
 
         dict_str = re.sub(r'\*\*([^*]+)\*\*', replace_single_int_bold, dict_str)
 
-        # 给 key 和 value 都加引号，确保能被 literal_eval
         # 1) key: → "key":
         safe_str = re.sub(r'(\w+)\s*:', r'"\1":', dict_str)
-        # 2) value 如果是裸标识符（没有引号也不是数字），加上引号
         safe_str = re.sub(r':\s*([A-Za-z_]\w*)', r':"\1"', safe_str)
         try:
             # tmp_dict = ast.literal_eval(safe_str)
@@ -550,9 +520,7 @@ def transfer_string_to_dict(s):
             print(f"[ERROR] {key} 解析失败: {e}")
             pass
             continue
-        # 避免 safe_eval_dict 解析失败返回 str 导致 .items() 崩溃
         if not isinstance(tmp_dict, dict):
-            # 解析失败时尝试从原始结构中按 key 提取「有且仅有一个有效整数」作为 value
             fallback = _extract_dict_single_int_from_str(dict_str)
             if fallback is not None:
                 tmp_dict = fallback
@@ -567,12 +535,11 @@ def transfer_string_to_dict(s):
                 cleaned[k] = v
                 continue
             if isinstance(v, str):
-                # 提取数字
                 nums = re.findall(r'\d+', v)
                 if len(set(nums)) == 1:
                     cleaned[k] = int(nums[0])
                 elif len(nums) == 0:
-                    cleaned[k] = None   # 没数字就 None
+                    cleaned[k] = None
                 else:
                     print(f"[DEBUG] {key}.{k} -> {v} 多个数字 {nums}")
                     pass
@@ -582,18 +549,6 @@ def transfer_string_to_dict(s):
     return received_output_list
 
 def calculate_proposal_overlap_pan(current_key, observe_id_list, received_output_list, MAX=5):
-    """
-    参数:
-        current_key: 当前节点/agent 的 key，比如 'home0'
-        observe_id_list: 要比较的对象列表，比如 ['home0', 'grocery0', ...]
-        received_output_list: 各节点的 proposal 字典
-        MAX: 归一化分母，默认 5
-
-    返回:
-        result: 每个邻居的逐项差异
-        diff_mean: 每个邻居的平均差异百分比
-        overall_mean: 所有邻居的整体平均差异百分比
-    """
     neighbors = [k for k in received_output_list.keys() if k != current_key]
     result = {current_key: {}}
     diff_mean = {current_key: {}}
@@ -601,16 +556,12 @@ def calculate_proposal_overlap_pan(current_key, observe_id_list, received_output
     for neighbor in neighbors:
         result[current_key][neighbor] = {}
         for check_value in observe_id_list:
-            # 当前 agent 的 proposal
             my_proposal = received_output_list[current_key].get(check_value, 0)
-            # 邻居的 proposal
             neighbor_proposal = received_output_list[neighbor].get(check_value, 0)
-            # 差异
             if neighbor_proposal is None or my_proposal is None:
                 continue
             result[current_key][neighbor][check_value] = abs(neighbor_proposal - my_proposal)
 
-    # 计算平均差异
     for neighbor, sub_dict in result[current_key].items():
         if sub_dict:
             values = list(sub_dict.values())
@@ -619,7 +570,6 @@ def calculate_proposal_overlap_pan(current_key, observe_id_list, received_output
         else:
             diff_mean[current_key][neighbor] = None
 
-    # 计算总体平均
     values = [v for v in diff_mean[current_key].values() if v is not None]
     overall_mean = sum(values) / len(values) if values else None
 
@@ -632,9 +582,7 @@ def transfer_cacc_state_dict_to_list(state_dict):
     action_result = []
     if match:
         vehicles_dict_str = match.group()
-        # 2. 转为dict
         vehicles_dict = ast.literal_eval(vehicles_dict_str)
-        # 3. 构造新的dict：{vehicleX: (np.array([distance, velocity]), action)}
 
         for v, tup in vehicles_dict.items():
             arr = np.array(tup[:2])
@@ -646,7 +594,6 @@ def transfer_cacc_state_dict_to_list(state_dict):
     return result, action_result
 
 def make_delta_action(state_from, state_to, action):
-    # 把两个agent的变化和action拼成一个向量
     delta1 = state_to[0] - state_from[0]
     delta2 = state_to[1] - state_from[1]
     return np.concatenate([delta1, delta2, action])
@@ -662,13 +609,11 @@ def calculate_transition_overlap(historical_state_dict_list, current_state_dict)
     state_t2, action_t2 = transfer_cacc_state_dict_to_list(current_state_dict)
     vec1 = make_delta_action(state_t0, state_t1, action_t1)   # [agent1_delta, agent2_delta, action1]
     vec2 = make_delta_action(state_t1, state_t2, action_t2)   # [agent1_delta, agent2_delta, action2]
-    # 计算余弦相似度
     overlap = cosine_similarity(vec1, vec2) * 100
-    normalized_overlap = (overlap + 1) / 2  # 将相似度从[-1, 1]范围转换到[0, 1]
+    normalized_overlap = (overlap + 1) / 2
     return normalized_overlap
 
 def label_exist(message, label):
-    # 检查message是否为字符串类型
     if not isinstance(message, str):
         return False
     has_flag = f'<{label}>' in message and f'</{label}>' in message

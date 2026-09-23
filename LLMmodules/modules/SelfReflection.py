@@ -325,7 +325,6 @@ class SelfReflection:
         message_list.append({"role": "assistant", "name": f"{current_agent.agent_name}{current_agent.agent_id}", "content": f"[Episode {self.current_episode-1} Negotiation Record]: \n {last_negotiation} \n\n"})
 
 
-        # NOTE 1001: for ablation study 似乎是重复添加了
         # message_list.append({"role": "assistant", "name": f"{current_agent.agent_name}{current_agent.agent_id}", "content": f"[Episode {self.current_episode} Negotiation Record]: \n {current_negotiation} \n\n"})
         # message_list.append({"role": "assistant", "name": f"{current_agent.agent_name}{current_agent.agent_id}", "content": f"[{current_agent.agent_name}{current_agent.agent_id}'s Temporal Plan in Episode {self.current_episode}]:\n{current_agent.temporal_insights}"})
         # message_list.append({"role": "assistant", "name": f"{current_agent.agent_name}{current_agent.agent_id}", "content": f"[{current_agent.agent_name}{current_agent.agent_id}'s Spatial Analysis in Episode {self.current_episode}]:\n{current_agent.spatial_insights}"})

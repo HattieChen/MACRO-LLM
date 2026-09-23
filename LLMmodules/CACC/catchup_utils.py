@@ -4,13 +4,7 @@ import math
 
 # def update_mean(old_mean, old_count, new_sample):
 #     """
-#     使用Welford算法更新均值。
-#     :param old_mean: 前 n-1 个样本的均值 (μ_{n-1})
-#     :param old_count: 前 n-1 个样本的数量 (n-1)
-#     :param new_sample: 新样本 x_n
-#     :return: 新均值 μ_n 和新的样本数 n
 #     """
-#     new_count = old_count + 1  # 添加后总样本数 n
 #     delta = new_sample - old_mean
 #     new_mean = old_mean + delta / new_count
 #     return new_mean
@@ -23,34 +17,6 @@ def welford_update_from_stats(mean_prev: float,
                               input_ddof: int = 1,
                               output_ddof: Optional[int] = None
                               ) -> Tuple[float, float, int]:
-    """
-    使用 Welford 方法，在只知道“前 count_prev 个样本的均值与方差”的情况下，
-    加入单个新样本 x_new，返回更新后的均值、方差与样本数。
-
-    参数
-    ----
-    mean_prev : 前 count_prev 个样本的均值
-    var_prev  : 前 count_prev 个样本的方差
-                - 若 input_ddof=1，则应传入“样本方差”（分母 count_prev-1）
-                - 若 input_ddof=0，则应传入“总体方差”（分母 count_prev）
-    count_prev: 之前的样本数（即 n-1）
-    x_new     : 新样本 x_n
-    input_ddof: 描述 var_prev 的自由度 (0=总体方差, 1=样本方差)，默认 1
-    output_ddof: 想要返回的方差类型 (0=总体, 1=样本)；
-                 默认与 input_ddof 相同
-
-    返回
-    ----
-    (mean_new, var_new, count_new)
-      mean_new : 更新后的均值
-      var_new  : 更新后的方差（按 output_ddof 的定义）
-      count_new: 更新后的样本数 (= count_prev + 1)
-
-    说明
-    ----
-    - 当样本数 <= output_ddof 时，方差没有定义，函数将返回 math.nan。
-    - 若从空集开始（count_prev=0），请设 mean_prev 与 var_prev 任意（通常 0），本函数可正常处理。
-    """
     if output_ddof is None:
         output_ddof = input_ddof
 
@@ -59,13 +25,10 @@ def welford_update_from_stats(mean_prev: float,
 
     n_new = count_prev + 1
 
-    # 还原并更新 M2
     if count_prev == 0:
-        # 第一个样本：均值为该样本，M2=0
         mean_new = float(x_new)
         M2_new = 0.0
     else:
-        # 根据 var_prev 的定义还原 M2_prev
         # input_ddof=1 -> M2_prev = var_prev * (count_prev - 1)
         # input_ddof=0 -> M2_prev = var_prev * count_prev
         M2_prev = var_prev * (count_prev - input_ddof)
@@ -75,7 +38,6 @@ def welford_update_from_stats(mean_prev: float,
         delta2 = x_new - mean_new
         M2_new = M2_prev + delta * delta2
 
-    # 由 M2_new 计算目标方差
     denom = n_new - output_ddof
     var_new = (M2_new / denom) if denom > 0 else math.nan
 
@@ -88,36 +50,17 @@ def welford_ew_update(mean_prev: Optional[float],
                       *,
                       clamp_nonneg: bool = True
                       ) -> Tuple[float, float]:
-    """
-    使用 Welford 风格的稳定公式，对“指数加权（EMA）均值与方差”进行一步更新。
-    你的加权规则：mean_n = x_n * weight + mean_{n-1} * (1 - weight)
-
-    参数
-    ----
-    mean_prev : 上一步（n-1）个样本的 EMA 均值；首次可为 None
-    var_prev  : 上一步（n-1）个样本的 EMA 方差；首次可为 None
-    x_new     : 新样本 x_n
-    weight    : 权重 w，需满足 0 < w <= 1。w 越大，新样本影响越大
-    clamp_nonneg : 若出现极小的负数（浮点误差），是否钳到 0（默认 True）
-
-    返回
-    ----
-    (mean_new, var_new) : 更新后的 EMA 均值与方差
-    """
     if not (0 < weight <= 1):
         raise ValueError("weight 必须在 (0, 1] 内")
 
-    # 初始化：第一条样本
     if mean_prev is None or var_prev is None:
         return float(x_new), 0.0
 
-    # Welford 风格稳定更新
     delta = x_new - mean_prev
     mean_new = mean_prev + weight * delta
     var_new = (1.0 - weight) * (var_prev + weight * delta * delta)
 
     if clamp_nonneg and var_new < 0:
-        # 仅为处理极小负数的数值误差
         var_new = 0.0
 
     return mean_new, var_new
@@ -132,29 +75,19 @@ def ref_acc(
     my_last_acceleration: float,
     ahead_acceleration: float,
     sample_rate: float = 0.5,
-    # 任务/车辆参数（可按需调整）
     v_des: float = 15.0,
     d_target: float = 20.0,
     d_min: float = 10.0,
     a_min: float = -2.5,
     a_max: float =  2.5,
-    # 基线控制律增益（适配 T=0.5 的保守初值）
-    k_d: float = 0.20,     # [1/s^2]   距离项刚度
-    k_delta: float = 1.00, # [1/s]     相对速度阻尼
-    k_s: float = 0.10,     # [1/s]     绝对速度拉向 v_des
-    k_ff: float = 1.00,    # [-]       前馈权重
-    # 门控阈值
+    k_d: float = 0.20,
+    k_delta: float = 1.00,
+    k_s: float = 0.10,
+    k_ff: float = 1.00,
     e_th: float = 5.0,     # [m]
     dv_th: float = 2.0,    # [m/s]
-    # jerk 限：每秒允许的加速度改变量（你给的是 2*sample_rate -> Δa_max = 2T）
     jerk_per_sec: float = 5.0
 ) -> float:
-    """
-    返回当前时刻的“基线最优加速度”（已做两拍保守安全投影 + jerk/饱和），
-    供后续同步协商使用。
-
-    参数单位：距离(m)、速度(m/s)、加速度(m/s^2)、时间(s)。
-    """
     T = sample_rate
     v_f = ahead_velocity
     d   = my_distance
@@ -162,11 +95,9 @@ def ref_acc(
     a_prev = my_last_acceleration
     a_f_prev = ahead_acceleration
 
-    # 1) 门控系数 alpha（安全/一致时放大速度项）
     alpha = 1.0 - abs(d - d_target) / max(e_th, 1e-6) - abs(v - v_f) / max(dv_th, 1e-6)
     alpha = max(0.0, min(1.0, alpha))
 
-    # 2) 基线控制律（阻尼 + 前馈 + 速度门控）
     a_base = (
         - k_d    * (d - d_target)
         - k_delta* (v - v_f)
@@ -174,41 +105,28 @@ def ref_acc(
         + k_ff   * (a_f_prev)
     )
 
-    # 3) 先对自己施加 jerk/饱和的硬约束窗口
-    da_max = jerk_per_sec * T                 # 你给的规则: Δa_max = 2*T
+    da_max = jerk_per_sec * T
     a_low  = max(a_min, a_prev - da_max)
     a_high = min(a_max, a_prev + da_max)
 
-    # 4) 一拍硬安全投影（对前车取最不利的极值）
-    a_f_min = max(a_min, a_f_prev - da_max)   # 前车下一拍最不利(更减速)
+    a_f_min = max(a_min, a_f_prev - da_max)
     a_safe_max_1 = a_f_min + (2.0 / (T*T)) * (d - d_min + (v_f - v) * T)
-    # 在 a_base 与安全上界之间取最保守
     a_ref = min(a_base, a_safe_max_1)
-    # 先裁到自己的可达窗口
     a_ref = min(max(a_ref, a_low), a_high)
 
-    # 5) 两拍保守校验：保证下一拍仍能找到可行 a_next 让 d_{k+2} >= d_min
-    # 5.1 预测到 k+1 (最不利的前车)
     v1  = v  + a_ref * T
     v1f = v_f + a_f_min * T
     d1  = d  + (v_f - v) * T + 0.5 * (a_f_min - a_ref) * (T*T)
 
-    # 5.2 前车再最不利变化一拍
     a_f2_min = max(a_min, a_f_min - da_max)
 
-    # 5.3 计算下一拍的安全上界（针对 a_next）
     a_safe_max_2 = a_f2_min + (2.0 / (T*T)) * (d1 - d_min + (v1f - v1) * T)
 
-    # 5.4 检查“是否存在可行 a_next”：min_feasible_next <= a_safe_max_2
     min_feasible_next = max(a_min, a_ref - da_max)
     if min_feasible_next > a_safe_max_2:
-        # 需要把当前 a 再往下收（更减速），直到下拍可行
-        # 一个实用近似：a <= a_safe_max_2 + da_max
         a_ref = min(a_ref, a_safe_max_2 + da_max)
-        # 重新裁到自己的可达窗口
         a_ref = min(max(a_ref, a_low), a_high)
 
-    # 6) 输出（再次确保饱和窗口）
     opt_acc = min(max(a_ref, a_low), a_high)
     return float(opt_acc)
 
@@ -409,63 +327,45 @@ def gen_reward_prompt(dt):
 '''
 def reward_in_one_round(
     # n,  # seconds
-    my_headway,        # 当前与前车的距离
-    rear_headway,      # 当前与后车的距离
-    my_velocity,       # 我的当前速度
-    front_velocity,    # 前车当前速度
-    rear_velocity,     # 后车当前速度
-    my_acceleration,   # 我的当前加速度
-    front_acceleration_next,  # 前车调整后的加速度
-    rear_acceleration_next,    # 后车调整后的加速度
-    my_acceleration_next       # 我调整后的加速度
+    my_headway,
+    rear_headway,
+    my_velocity,
+    front_velocity,
+    rear_velocity,
+    my_acceleration,
+    front_acceleration_next,
+    rear_acceleration_next,
+    my_acceleration_next
 ) -> float:
-    """
-    计算调整加速度后n秒内的综合成本，包含：
-    - 与前车和后车距离安全值20的差距平方
-    - 我的速度与目标值15的差距平方
-    - 加速度调整的平稳性惩罚
-    """
     n = 1  # seconds, 1s
-    # === 计算n秒后的位移 ===
-    # 我的位移：s = v0*t + 0.5*a*t²
     my_displacement = (
         my_velocity * n +
         0.5 * my_acceleration_next * n**2
     )
 
-    # 前车位移（基于调整后的前车加速度）
     front_displacement = (
         front_velocity * n +
         0.5 * front_acceleration_next * n**2
     )
 
-    # 后车位移（基于调整后的后车加速度）
     rear_displacement = (
         rear_velocity * n +
         0.5 * rear_acceleration_next * n**2
     )
 
-    # === 计算n秒后的车距 ===
-    # 新与前车距离 = 原距离 + 前车位移 - 我的位移
     new_my_headway = my_headway + (front_displacement - my_displacement)
-    # 新与后车距离 = 原距离 + 我的位移 - 后车位移
     new_rear_headway = rear_headway + (my_displacement - rear_displacement)
 
-    # === 计算各项成本 ===
-    # 车距安全差距平方和
     headway_cost = (
         (new_my_headway - 20)**2 +
         (new_rear_headway - 20)**2
     )
 
-    # 速度与目标差距平方
     new_my_velocity = my_velocity + my_acceleration_next * n
     velocity_cost = (new_my_velocity - 15)**2
 
-    # 加速度变化惩罚
     acceleration_cost = (my_acceleration_next - my_acceleration)**2
 
-    # === 总成本 ===
     total_reward = - headway_cost - velocity_cost - acceleration_cost
     return total_reward
 '''
@@ -494,37 +394,26 @@ def reward_in_one_round(E_Observable_State, Promising_proposal) -> float:
         front_acceleration = sorted_observable_state[0][2]
         front_acceleration_next = sorted_promising_action[0]
 
-        # === 计算n秒后的位移 ===
-        # 我的位移：s = v0*t + 0.5*a*t²
         my_displacement = (
             my_velocity * n +
             0.5 * my_acceleration_next * n**2
         )
-        # 前车位移（基于调整后的前车加速度）
         front_displacement = (
             front_velocity * n +
             0.5 * front_acceleration_next * n**2
         )
-        # 后车位移（基于调整后的后车加速度）
         rear_displacement = (
             rear_velocity * n +
             0.5 * rear_acceleration_next * n**2
         )
-        # === 计算n秒后的车距 ===
-        # 新与前车距离 = 原距离 + 前车位移 - 我的位移
         new_my_headway = my_headway + (front_displacement - my_displacement)
-        # 新与后车距离 = 原距离 + 我的位移 - 后车位移
         new_rear_headway = rear_headway + (my_displacement - rear_displacement)
-        # === 计算各项成本 ===
-        # 车距安全差距平方和
         headway_cost = (
             (new_my_headway - 20)**2 +
             (new_rear_headway - 20)**2
         )
-        # 速度与目标差距平方
         new_my_velocity = my_velocity + my_acceleration_next * n
         velocity_cost = (new_my_velocity - 15)**2
-        # 加速度变化惩罚
         acceleration_cost = (my_acceleration_next - my_acceleration)**2
 
     elif len(E_Observable_State) == 2 & len(Promising_proposal) == 2:
@@ -544,37 +433,26 @@ def reward_in_one_round(E_Observable_State, Promising_proposal) -> float:
             front_acceleration = 0
             front_acceleration_next = 0
 
-            # === 计算n秒后的位移 ===
-            # 我的位移：s = v0*t + 0.5*a*t²
             my_displacement = (
                 my_velocity * n +
                 0.5 * my_acceleration_next * n**2
             )
-            # 前车位移（基于调整后的前车加速度）
             front_displacement = (
                 front_velocity * n +
                 0.5 * front_acceleration_next * n**2
             )
-            # 后车位移（基于调整后的后车加速度）
             rear_displacement = (
                 rear_velocity * n +
                 0.5 * rear_acceleration_next * n**2
             )
-            # === 计算n秒后的车距 ===
-            # 新与前车距离 = 原距离 + 前车位移 - 我的位移
             new_my_headway = my_headway + (front_displacement - my_displacement)
-            # 新与后车距离 = 原距离 + 我的位移 - 后车位移
             new_rear_headway = rear_headway + (my_displacement - rear_displacement)
-            # === 计算各项成本 ===
-            # 车距安全差距平方和
             headway_cost = (
                 (new_my_headway - 20)**2 +
                 (new_rear_headway - 20)**2
             )
-            # 速度与目标差距平方
             new_my_velocity = my_velocity + my_acceleration_next * n
             velocity_cost = (new_my_velocity - 15)**2
-            # 加速度变化惩罚
             acceleration_cost = (my_acceleration_next - my_acceleration)**2
         elif list(E_Observable_State())[0] == "vehicle_7" and list(E_Observable_State())[1] == "vehicle_8":
             my_headway = sorted_observable_state[1][0] # my headway
@@ -587,37 +465,26 @@ def reward_in_one_round(E_Observable_State, Promising_proposal) -> float:
             front_acceleration = sorted_observable_state[0][2]
             front_acceleration_next = sorted_promising_action[0]
 
-            # === 计算n秒后的位移 ===
-            # 我的位移：s = v0*t + 0.5*a*t²
             my_displacement = (
                 my_velocity * n +
                 0.5 * my_acceleration_next * n**2
             )
-            # 前车位移（基于调整后的前车加速度）
             front_displacement = (
                 front_velocity * n +
                 0.5 * front_acceleration_next * n**2
             )
-            # 后车位移（基于调整后的后车加速度）
             rear_displacement = (
                 rear_velocity * n +
                 0.5 * rear_acceleration_next * n**2
             )
-            # === 计算n秒后的车距 ===
-            # 新与前车距离 = 原距离 + 前车位移 - 我的位移
             new_my_headway = my_headway + (front_displacement - my_displacement)
-            # 新与后车距离 = 原距离 + 我的位移 - 后车位移
             new_rear_headway = rear_headway + (my_displacement - rear_displacement)
-            # === 计算各项成本 ===
-            # 车距安全差距平方和
             headway_cost = (
                 (new_my_headway - 20)**2 +
                 (new_rear_headway - 20)**2
             )
-            # 速度与目标差距平方
             new_my_velocity = my_velocity + my_acceleration_next * n
             velocity_cost = (new_my_velocity - 15)**2
-            # 加速度变化惩罚
             acceleration_cost = (my_acceleration_next - my_acceleration)**2
     total_reward = - headway_cost - velocity_cost - acceleration_cost
     return total_reward

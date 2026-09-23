@@ -4,7 +4,6 @@ from openai import AzureOpenAI, OpenAI, RateLimitError
 import time
 import json, os
 import numpy as np
-from swarm import Swarm, Agent
 import configparser
 from pathlib import Path
 from LLMmodules.TaskConfiguration import catchup
@@ -71,7 +70,6 @@ if FLAG == 'GPT':
         azure_deployment=OPENAI_MODEL1,
         api_version="2025-04-01-preview",
     )
-    client = Swarm(client=azure_client1)
     print(f"{OPENAI_MODEL1} client initialized")
 
 
@@ -97,7 +95,6 @@ elif FLAG == 'Llama':
         api_key=API_KEY1,
         base_url=BASE_URL1,
     )
-    client = Swarm(client=azure_client1)
     print(f"{OPENAI_MODEL1} client initialized")
 
 # Generate lst dynamically based on VEHICLE_NUM
@@ -197,36 +194,11 @@ class CPPAgent():
         self.MAX_MESSAGE = config.getint('MAX_MESSAGE')
         self.REMAIN_MESSAGE = config.getint('REMAIN_MESSAGE')
         self.xgrammar_flag = config.getint('XGRAMMAR_FLAG', fallback=0)
-        instruction = f'\n You are vehicle_{self.agent_id} in a column of {self.n_agent} vehicles.'
         self.V_FLAG = config.get('VELOCITY_FLAG')
         self.target_meter = config.get('TARGET_DIS')
-        # if self.agent_id == 1:
-        #     instruction = config.get('INSTRUCTION') + "\n - You are the 1st vehicle in the convoy."
-        # elif self.agent_id == 2:
-        #     instruction = config.get('INSTRUCTION') + "\n - You are the 2nd vehicle in the convoy."
-        # else:
-        #     instruction = config.get('INSTRUCTION') + f"\n - You are the {self.agent_id}th vehicle in the convoy."
-        # only instruction to define the behavior
-        if FLAG == 'GPT':
-            # --------- Swarm framework with OPENAI GPT-4o -----------
-            self.agent = Agent(name=f"vehicle_{self.agent_id}",
-                               instructions=instruction,
-                               model=self.model,
-                               functions=[])
 
     def append_user_question_to_file(self, user_question, update = False):
-        """
-        将用户的问题追加到指定 JSON 文件中的 Initial message 后面。
-
-        Args:
-            file_path (str): JSON 文件路径。
-            user_question (str): 用户的问题。
-
-        Returns:
-            None: 直接修改 JSON 文件。
-        """
         try:
-            # 读取 JSON 文件
             with open(self.conv_path, "r", encoding="utf-8") as f:
                 conversation_context = json.load(f)
             # NOTE: update the conversation file
@@ -237,16 +209,13 @@ class CPPAgent():
                     self.conv_path = self.conv_path.replace("agent", "agent_u")
             if "messages" not in conversation_context:
                 conversation_context["messages"] = []
-            # 创建新的用户消息
             user_message = {
                 "role": f"user",
                 # "name": f"agent{self.agent_id}",
                 "content": user_question
             }
-            # 追加用户消息到 messages 列表
             conversation_context["messages"].append(user_message)
             # print(f"Appended user question to file: {user_question}")
-            # 将更新后的内容写回 JSON 文件
             with open(self.conv_path, "w", encoding="utf-8") as f:
                 json.dump(conversation_context, f, indent=4, ensure_ascii=False)
             # print(f"Updated conversation context saved to {self.conv_path}")
@@ -347,7 +316,7 @@ class CPPAgent():
                 query_proposal += f""" according to the following instructions step-by-step.
                 Step 0: Action Selection for {self.agent_name}{self.agent_id}. If the current distance of {self.agent_name}{self.agent_id} is not equal to {self.target_meter} meters and the current velocity is not equal to {v_lead} m/s at the same time, do the following steps: 1) Calculate the optimal acceleration based on distance by using [Equation: optimal action according to distance], and obtain distance_optimal_acceleration. 2) Calculate the optimal acceleration based on velocity by using [Equation: optimal action according to velocity], and obtain velocity_optimal_acceleration. 3) Calculate the weights for distance and velocity based on the absolute acceleration demand: w_distance = |distance_optimal_acceleration|/(|velocity_optimal_acceleration|+|distance_optimal_acceleration|), w_velocity = |velocity_optimal_acceleration|/(|velocity_optimal_acceleration|+|distance_optimal_acceleration|). final_acceleration=w_distance * distance_optimal_acceleration + w_velocity * velocity_optimal_acceleration, where w_distance and w_velocity are the weights for distance and velocity and w_distance + w_velocity = 1. 4) Define the urgency based on the calculated acceleration: normal: acceleration in range (-0.5, 0.5), warning: acceleration in range (-{ACC}, -0.5] or [0.5, {ACC}). urgent: acceleration <= -{ACC} or acceleration >= {ACC}. 5) Clip the resulting action to the safe range [-{ACC}, {ACC}] \n.
                     """
-            else: # 2: calculate optimal acceleration with flag: 0: 误差归一化; 1: 加速度需求权重; 2: sigmod
+            else:
                 if f"{self.agent_name}{self.agent_id-1}" not in state_dict:
                     if catchup_flag:
                         ahead_velocity = 15
@@ -367,7 +336,7 @@ class CPPAgent():
                 my_velocity = state_dict[f"{self.agent_name}{self.agent_id}"][1]
                 my_acceleration = state_dict[f"{self.agent_name}{self.agent_id}"][3]
                 my_vh = state_dict[f"{self.agent_name}{self.agent_id}"][4]
-                opt_acc, w_headway, headway_optimal_acc, w_velocity, velocity_optimal_acc = optimal_acc(ahead_velocity, my_headway, my_velocity, flag = weight_flag, v_flag = self.V_FLAG, dt=0.5, task_flag=TASK_FLAG) # 0: 误差归一化; 1: 加速度需求权重; 2: sigmod # NOTE 0729 opt_acc --> ref_acc
+                opt_acc, w_headway, headway_optimal_acc, w_velocity, velocity_optimal_acc = optimal_acc(ahead_velocity, my_headway, my_velocity, flag = weight_flag, v_flag = self.V_FLAG, dt=0.5, task_flag=TASK_FLAG)
                 # opt_acc = ref_acc(ahead_velocity=ahead_velocity, my_distance=my_headway, my_velocity = my_velocity, my_last_acceleration=my_acceleration, ahead_acceleration=ahead_acceleration)
                 # opt_acc = vh_acc(my_velocity=my_velocity, vh=my_vh, dt=0.5)
 
@@ -385,12 +354,12 @@ class CPPAgent():
                 query_proposal += f"Step 0: Initial Decision for {self.agent_name}{self.agent_id} at the 1st time step. \n - According to your state, the optimal initial acceleration for 1st time step is {opt_acc}. \n - Define urgency of the action: Normal: acceleration in range (-0.5, 0.5); Warning: acceleration in range (-{ACC}, -0.5] or [0.5, {ACC}); Urgent: acceleration <= -{ACC} or acceleration >= {ACC}. \n - Clip the resulting acceleration for the 1st time step to the safe range [-{ACC}, {ACC}] \n."
 
         else: # Ignore target velocity setting
-            if case_flag == 0: # 自定义linear weights
+            if case_flag == 0:
                 query_proposal += f""" according to the following instructions step-by-step.
                 Step 0: Action Selection for {self.agent_name}{self.agent_id} If the current distance of {self.agent_name}{self.agent_id} is not equal to {self.target_meter} meters, and the current velocity is not equal to {v_lead} at the same time, please do the following: 1) Calculate the optimal acceleration based on distance by using [Equation: optimal action according to distance], and obtain distance_optimal_acceleration. 2) Calculate the optimal acceleration based on velocity by using [Equation: optimal action according to velocity], and obtain velocity_optimal_acceleration. 3) Use a linear weighted sum to combine these two accelerations into a final acceleration action: final_acceleration=w_distance * distance_optimal_acceleration + w_velocity * velocity_optimal_acceleration, where w_distance and w_velocity are the weights for distance and velocity and w_distance + w_velocity = 1. 4) Define the urgency based on the calculated acceleration: normal: acceleration in range (-0.5, 0.5), warning: acceleration in range (-{ACC}, -0.5] or [0.5, {ACC}). urgent: acceleration <= -{ACC} or acceleration >= {ACC}. 5) Clip the resulting action to the safe range [-{ACC}, {ACC}] \n. """
             elif case_flag == 1: # absolute acceleration as weights
                 query_proposal += f""" according to the following instructions step-by-step. \n Step 0: Action Selection for {self.agent_name}{self.agent_id}. If the current distance of {self.agent_name}{self.agent_id} is not equal to {self.target_meter} meters, and the current velocity is not equal to {v_lead} at the same time, please do the following: 1) Calculate the optimal acceleration based on distance by using [Equation: optimal action according to distance], and obtain distance_optimal_acceleration. 2) Calculate the optimal acceleration based on velocity by using [Equation: optimal action according to velocity], and obtain velocity_optimal_acceleration. 3) Calculate the weights for distance and velocity based on the absolute acceleration demand: w_distance = |distance_optimal_acceleration|/(|velocity_optimal_acceleration|+|distance_optimal_acceleration|), w_velocity = |velocity_optimal_acceleration|/(|velocity_optimal_acceleration|+|distance_optimal_acceleration|). final_acceleration=w_distance * distance_optimal_acceleration + w_velocity * velocity_optimal_acceleration, where w_distance and w_velocity are the weights for distance and velocity and w_distance + w_velocity = 1. 4) Define the urgency based on the calculated acceleration: normal: acceleration in range (-0.5, 0.5), warning: acceleration in range (-{ACC}, -0.5] or [0.5, {ACC}). urgent: acceleration <= -{ACC} or acceleration >= {ACC}. 5) Clip the resulting action to the safe range [-{ACC}, {ACC}] \n. """
-            elif case_flag == 2: # calculate optimal acceleration with flag: 0: 误差归一化; 1: 加速度需求权重; 2: sigmod
+            elif case_flag == 2:
                 if f"{self.agent_name}{self.agent_id-1}" not in state_dict:
                     # ahead_velocity = 15
                     ahead_velocity = v_lead
@@ -402,7 +371,7 @@ class CPPAgent():
                 my_headway = state_dict[f"{self.agent_name}{self.agent_id}"][0]
                 my_velocity = state_dict[f"{self.agent_name}{self.agent_id}"][1]
                 my_acceleration = state_dict[f"{self.agent_name}{self.agent_id}"][3]
-                opt_acc, w_headway, headway_optimal_acc, w_velocity, velocity_optimal_acc = optimal_acc(ahead_velocity, my_headway, my_velocity, flag = weight_flag, v_flag=self.V_FLAG, dt = self.dt) # 0: 误差归一化; 1: 加速度需求权重; 2: sigmod
+                opt_acc, w_headway, headway_optimal_acc, w_velocity, velocity_optimal_acc = optimal_acc(ahead_velocity, my_headway, my_velocity, flag = weight_flag, v_flag=self.V_FLAG, dt = self.dt)
 
                 if int(config["LLM_CONFIG"]["SELF_DEFINE_FLAG"]) == 1:
                     query_proposal += f"""According to the following instructions step-by-step.
@@ -1361,20 +1330,15 @@ class CPPAgent():
         :param system_prompt: The system prompt content.
         """
         try:
-            # 读取 JSON 文件
             with open(self.SF_record_path, "r", encoding="utf-8") as f:
                 conversation_context = json.load(f)
-            # 确保 "messages" 键存在
             if "messages" not in conversation_context:
                 conversation_context["messages"] = []
-            # 创建新的系统消息
             system_message = {
                 "role": "system",
                 "content": system_prompt
             }
-            # 追加系统消息到 messages 列表
             conversation_context["messages"].append(system_message)
-            # 将更新后的内容写回 JSON 文件
             with open(self.SF_record_path, "w", encoding="utf-8") as f:
                 json.dump(conversation_context, f, indent=4, ensure_ascii=False)
             # print(f"Updated conversation context saved to {self.conv_path}")
@@ -1392,20 +1356,15 @@ class CPPAgent():
         :param system_prompt: The system prompt content.
         """
         try:
-            # 读取 JSON 文件
             with open(self.conv_path, "r", encoding="utf-8") as f:
                 conversation_context = json.load(f)
-            # 确保 "messages" 键存在
             if "messages" not in conversation_context:
                 conversation_context["messages"] = []
-            # 创建新的系统消息
             system_message = {
                 "role": "system",
                 "content": system_prompt
             }
-            # 追加系统消息到 messages 列表
             conversation_context["messages"].append(system_message)
-            # 将更新后的内容写回 JSON 文件
             with open(self.conv_path, "w", encoding="utf-8") as f:
                 json.dump(conversation_context, f, indent=4, ensure_ascii=False)
             # print(f"Updated conversation context saved to {self.conv_path}")
@@ -1424,17 +1383,12 @@ class CPPAgent():
         :param proposal_id: The agent id of the proposal.
         """
         try:
-            # 读取 JSON 文件
             with open(self.SF_record_path, "r", encoding="utf-8") as f:
                 conversation_context = json.load(f)
-            # 确保 "messages" 键存在
             if "messages" not in conversation_context:
                 conversation_context["messages"] = []
-            # 创建新的用户消息
             user_message = proposal_content
-            # 追加用户消息到 messages 列表
             conversation_context["messages"].append(user_message)
-            # 将更新后的内容写回 JSON 文件
             with open(self.SF_record_path, "w", encoding="utf-8") as f:
                 json.dump(conversation_context, f, indent=4, ensure_ascii=False)
 
@@ -1452,21 +1406,16 @@ class CPPAgent():
         :param proposal_id: The agent id of the proposal.
         """
         try:
-            # 读取 JSON 文件
             with open(self.conv_path, "r", encoding="utf-8") as f:
                 conversation_context = json.load(f)
-            # 确保 "messages" 键存在
             if "messages" not in conversation_context:
                 conversation_context["messages"] = []
-            # 创建新的用户消息
             user_message = {
                 "role": "assistant",
                 "name": f"{proposal_name}",
                 "content": f"{proposal_name} proposes: {proposal_content}"
             }
-            # 追加用户消息到 messages 列表
             conversation_context["messages"].append(user_message)
-            # 将更新后的内容写回 JSON 文件
             with open(self.conv_path, "w", encoding="utf-8") as f:
                 json.dump(conversation_context, f, indent=4, ensure_ascii=False)
             # print(f"Updated conversation context saved to {self.conv_path}")
@@ -1631,7 +1580,6 @@ class CPPAgent():
 
         for attempt in range(1, MAX_LLM_RESPONSE_ATTEMPTS + 1):
             endDec, endDec_content = self.gen_response_with_format(query_content = message_list, format_list = format_list)
-            # 检查返回值是否为False（错误情况）
             if endDec == False and endDec_content == False:
                 print(f"Error: gen_response_with_format returned False in end_negotiation. Attempt {attempt}")
                 raise_if_llm_retry_exhausted(
@@ -1639,8 +1587,7 @@ class CPPAgent():
                     f"CACC agent {self.agent_id} final negotiation response",
                     "response generator returned (False, False)",
                 )
-                continue  # 重试
-            # 确保endDec_content是字符串类型
+                continue
             if not isinstance(endDec_content, str):
                 print(f"Warning: endDec_content is not a string, type: {type(endDec_content)}. Attempt {attempt}")
                 raise_if_llm_retry_exhausted(
@@ -1648,7 +1595,7 @@ class CPPAgent():
                     f"CACC agent {self.agent_id} final negotiation response",
                     f"expected string content, got {type(endDec_content).__name__}",
                 )
-                continue  # 重试
+                continue
             if label_exist(message=endDec_content, label='action') or label_exist(message=endDec_content, label='final_decision'):
                 return endDec, endDec_content
             raise_if_llm_retry_exhausted(
@@ -1685,14 +1632,13 @@ class CPPAgent():
 
 
     def message_list_query(self, message_list, default_client = azure_client1, default_model = OPENAI_MODEL1):
-        max_retries = 10      # 最多重试次数
-        retry_delay = 2      # 每次重试等待秒数
-        response = None  # 初始化response变量
+        max_retries = 10
+        retry_delay = 2
+        response = None
 
         for attempt in range(1, max_retries + 1):
             try:
                 if FLAG == 'GPT':
-                    # -------- Swarm Framework with OPENAI GPT-4o -----------
                     response = default_client.chat.completions.create(
                         model= default_model,
                         messages=message_list,
@@ -1700,24 +1646,21 @@ class CPPAgent():
                         # top_p = topp
                         # max_tokens=50
                     )
-                    # 检查response是否存在且类型正确
                     if response is None:
                         print("Error: response is None after all retries")
                         # import pdb; pdb.set_trace()
                         continue
 
-                    # 检查response是否为字符串（异常情况）
                     if isinstance(response, str):
                         print(f"Warning: response is a string instead of object: {response[:100]}...")
                         # import pdb; pdb.set_trace()
                         continue
 
-                    # 检查response是否有choices属性
                     if not hasattr(response, 'choices') or not response.choices:
                         print(f"Error: response does not have choices attribute or choices is empty. Response type: {type(response)}")
                         # import pdb; pdb.set_trace()
                         continue
-                    break  # 成功获取response就退出重试循环
+                    break
                 elif FLAG == 'Ali':
                     # output_content, thinking_content = self.client_run(messages=message_list)
                     response = default_client.chat.completions.create(
@@ -1733,18 +1676,16 @@ class CPPAgent():
                         pass
                         continue
 
-                    # 检查response是否为字符串（异常情况）
                     if isinstance(response, str):
                         print(f"Warning: response is a string instead of object: {response[:100]}...")
                         pass
                         continue
 
-                    # 检查response是否有choices属性
                     if not hasattr(response, 'choices') or not response.choices:
                         print(f"Error: response does not have choices attribute or choices is empty. Response type: {type(response)}")
                         pass
                         continue
-                    break  # 成功获取response就退出重试循环
+                    break
                 elif FLAG == 'Llama':
                     response = azure_client1.chat.completions.create(
                         model= default_model,
@@ -1763,7 +1704,7 @@ class CPPAgent():
                     time.sleep(retry_delay)
                 else:
                     print(f"Exceeded maximum retries ({max_retries}). Raising error.")
-                    raise  # 最后一次也失败则抛出异常
+                    raise
             # Handle content-policy request errors.
             except openai.BadRequestError as e:
                 return False, False
@@ -1782,7 +1723,6 @@ class CPPAgent():
                     print(f"Client error (HTTP {e.status_code}): {e.message}")
                     raise
             except json.JSONDecodeError as e:
-                # Llama/兼容 API 有时返回非 JSON（HTML/截断/流式混入），解析失败时重试
                 if attempt < max_retries:
                     print(f"[Retry {attempt}/{max_retries}] API response not valid JSON (e.g. server error/truncated), retrying after {retry_delay}s: {e}")
                     time.sleep(retry_delay)
@@ -1791,7 +1731,7 @@ class CPPAgent():
                     raise
             except Exception as e:
                 print(f"Unexpected error: type={type(e).__name__}, args={e.args}, msg={e}")
-                raise  # 其他错误直接抛出
+                raise
 
         if FLAG == 'GPT':
             # return response, response.messages[-1]["content"]
@@ -1802,7 +1742,6 @@ class CPPAgent():
         elif FLAG == 'Llama':
             return response, response.choices[0].message.content
         else:
-            # 处理其他FLAG值的情况
             print(f"Warning: Unknown FLAG value: {FLAG}")
             return False, False
 
@@ -2234,30 +2173,3 @@ class CPPAgent():
             - {self.agent_name}{self.agent_id}'s backward variances: weighted acceleration variance: {self.backward_WV}; distance variance: {self.backward_WVH}; velocity variance: {self.backward_WVV}.
             </spatial-insights>"""
         return spatial_dict
-
-
-
-    # -----------Swarm Framework with OPENAI GPT-4o -----------
-    '''
-    def gen_response_query(self, query_info):
-        max_retries = 10      # 最多重试次数
-        retry_delay = 2      # 每次重试等待秒数
-
-        for attempt in range(1, max_retries + 1):
-            try:
-                conversation_context = [{"role": "user", "content": query_info}]
-                response = client.run(agent=self.agent, messages=conversation_context)
-                break  # 成功获取response就退出重试循环
-            except RateLimitError as e:
-                if attempt < max_retries:
-                    print(f"[Retry {attempt}/{max_retries}] Rate limit error, retrying after {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                else:
-                    print(f"Exceeded maximum retries ({max_retries}). Raising error.")
-                    raise  # 最后一次也失败则抛出异常
-            except Exception as e:
-                print(f"Unexpected error: type={type(e).__name__}, args={e.args}, msg={e}")
-                raise  # 其他错误直接抛出
-
-        return response, response.messages[-1]["content"]
-        '''

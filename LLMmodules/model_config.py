@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 MODEL_OVERRIDE_ENV = "MACRO_LLM_MODEL"
+RUN_NAME_OVERRIDE_ENV = "MACRO_LLM_RUN_NAME"
 TEST_MODE_OVERRIDE_ENV = "MACRO_LLM_TEST_MODE"
 CONFIG_MODEL_ENV = "MODEL"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
@@ -59,8 +60,20 @@ def apply_model_override(config):
     return config.get("LLM_CONFIG", "MODEL")
 
 
+def apply_run_name_override(config):
+    """Resolve the output label, accepting legacy TEST_MODE configuration."""
+    run_name = os.environ.get(RUN_NAME_OVERRIDE_ENV)
+    if run_name is None:
+        run_name = os.environ.get(TEST_MODE_OVERRIDE_ENV)
+    if run_name is None:
+        option = "RUN_NAME" if config.has_option("LLM_CONFIG", "RUN_NAME") else "TEST_MODE"
+        run_name = config.get("LLM_CONFIG", option)
+    config.set("LLM_CONFIG", "RUN_NAME", run_name)
+    return run_name
+
+
 def apply_test_mode_override(config):
-    test_mode = os.environ.get(TEST_MODE_OVERRIDE_ENV)
-    if test_mode is not None:
-        config.set("LLM_CONFIG", "TEST_MODE", test_mode)
-    return config.get("LLM_CONFIG", "TEST_MODE")
+    """Compatibility wrapper for callers using the old output-label name."""
+    run_name = apply_run_name_override(config)
+    config.set("LLM_CONFIG", "TEST_MODE", run_name)
+    return run_name
